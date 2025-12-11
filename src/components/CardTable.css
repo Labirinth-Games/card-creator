@@ -1,0 +1,77 @@
+.modern-table-container {
+  overflow-x: auto;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.modern-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.modern-table thead {
+  background: #f8f9fa;
+  border-bottom: 2px solid #e9ecef;
+}
+
+.modern-table th {
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: #495057;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.modern-table tbody tr {
+  border-bottom: 1px solid #f8f9fa;
+  transition: background 0.2s;
+}
+
+.modern-table tbody tr:hover {
+  background: #f8f9fa;
+}
+
+.modern-table td {
+  padding: 0.75rem 1rem;
+}
+
+.modern-input {
+  border: none;
+  background: transparent;
+  padding: 0.5rem;
+  font-size: 14px;
+  width: 100%;
+  outline: none;
+  transition: background 0.2s;
+}
+
+.modern-input:focus {
+  background: #e7f3ff;
+  border-radius: 4px;
+}
+
+.modern-textarea {
+  resize: vertical;
+  font-family: inherit;
+  min-height: 40px;
+}
+
+.modern-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.5rem;
+  font-size: 18px;
+  transition: transform 0.2s;
+}
+
+.modern-button:hover {
+  transform: scale(1.2);
+}
+
+.modern-button.danger:hover {
+  color: #dc3545;
+}

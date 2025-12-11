@@ -1,0 +1,80 @@
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  
+  @page {
+    size: A4;
+    margin: 0;
+  }
+  
+  /* Garantir dimensões exatas na impressão */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+  
+  /* Páginas de impressão */
+  .print-page {
+    width: 210mm !important;
+    height: 297mm !important;
+    border: none !important;
+    background: white !important;
+    box-shadow: none !important;
+    page-break-after: always !important;
+    page-break-inside: avoid !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+  }
+  
+  .print-page:last-child {
+    page-break-after: auto !important;
+  }
+  
+  /* Grid de cartas - mantém visível */
+  .cards-grid {
+    display: grid !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+  
+  /* Cartas individuais - mantém visível */
+  .card-wrapper {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+  
+  /* Container das cartas - forçar dimensões reais */
+  .card-container {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    box-shadow: none !important;
+    /* Garantir que o tamanho seja respeitado */
+    min-width: auto !important;
+    min-height: auto !important;
+    max-width: none !important;
+    max-height: none !important;
+    flex-shrink: 0 !important;
+  }
+  
+  /* Garantir que todo conteúdo das cartas seja visível */
+  .card-container * {
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+}
+
+/* Estilos para visualização na tela */
+@media screen {
+  .print-page {
+    margin-bottom: 20px;
+  }
+}
