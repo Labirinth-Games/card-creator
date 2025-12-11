@@ -3,16 +3,8 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, doc, addDoc, setDoc, getDoc, getDocs, updateDoc, deleteDoc } from 'firebase/firestore';
 
 
-// Configuração real do Firebase
-const firebaseConfig = {
-  apiKey: "AIzaSyDTmJvU14IoOySJKRrz6mYE1sAV7Uq_qO4",
-  authDomain: "card-creator-efa05.firebaseapp.com",
-  projectId: "card-creator-efa05",
-  storageBucket: "card-creator-efa05.firebasestorage.app",
-  messagingSenderId: "1008211300300",
-  appId: "1:1008211300300:web:ea65f9045fb06d6cd19769",
-  measurementId: "G-VMXWTBLL81"
-};
+
+import firebaseConfig from './firebaseConfig';
 
 // (Opcional) Analytics
 // import { getAnalytics } from "firebase/analytics";
