@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "card-game-builder",
     "public": "build",
     "ignore": [
       "firebase.json",

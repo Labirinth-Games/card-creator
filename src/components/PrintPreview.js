@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import './PrintPreview.css';
 
-function PrintPreview({ data }) {
+function PrintPreview({ data, overrideDeck }) {
   const [cardGap, setCardGap] = useState(2); // mm entre cartas
   const [safetyMargin, setSafetyMargin] = useState(5); // mm de margem de segurança
   const [deckData, setDeckData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [allFonts, setAllFonts] = useState([]);
   
-  if (data.selectedProject === null || data.selectedDeck === null || !data.projects[data.selectedProject]) {
+  if (!overrideDeck && (data.selectedProject === null || data.selectedDeck === null || !data.projects[data.selectedProject])) {
     return <p>Selecione um projeto e deck primeiro.</p>;
   }
 
@@ -58,6 +58,27 @@ function PrintPreview({ data }) {
   useEffect(() => {
     async function fetchDeckAndCards() {
       setLoading(true);
+
+      if (overrideDeck) {
+        const project = overrideDeck.project;
+        let deck = overrideDeck.deck;
+        let cards = deck?.cards || [];
+        if (deck && deck.id && project && project.id) {
+          try {
+            const { db } = await import('../utils/firebase');
+            const { collection, getDocs } = await import('firebase/firestore');
+            const cardsCol = collection(db, 'projects', project.id, 'decks', deck.id, 'cards');
+            const cardsSnap = await getDocs(cardsCol);
+            cards = cardsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          } catch (e) {
+            cards = deck.cards || [];
+          }
+        }
+        setDeckData(deck ? { ...deck, cards } : null);
+        setLoading(false);
+        return;
+      }
+
       const project = data.projects[data.selectedProject];
       let deck = project.decks?.[data.selectedDeck];
       if (!deck && project.decks) {
@@ -92,7 +113,7 @@ function PrintPreview({ data }) {
       setLoading(false);
     }
     fetchDeckAndCards();
-  }, [data.selectedProject, data.selectedDeck]);
+  }, [data.selectedProject, data.selectedDeck, overrideDeck]);
 
   if (loading) {
     return <p>Carregando deck...</p>;
@@ -121,9 +142,92 @@ function PrintPreview({ data }) {
 
   const cardsPerPage = 9; // 3x3 em A4
   const pages = [];
+  const versoPages = [];
   for (let i = 0; i < expandedCards.length; i += cardsPerPage) {
     pages.push(expandedCards.slice(i, i + cardsPerPage));
+    versoPages.push(expandedCards.slice(i, i + cardsPerPage));
   }
+
+  const renderVerso = (card) => {
+    const cardConfigBorder = designer.cardConfig || { borderRadius: 8, borderWidth: 2, borderColor: '#333' };
+    const versoElements = designer.versoElements || [];
+    
+    const match = designer.tipo.nome.match(/(\d+)x(\d+)mm/);
+    const widthMm = match ? parseFloat(match[1]) : (designer.tipo.width / 4);
+    const heightMm = match ? parseFloat(match[2]) : (designer.tipo.height / 4);
+    const scaleFactor = widthMm / designer.tipo.width;
+    
+    return (
+      <div className="card-container" style={{
+        position: 'relative',
+        width: widthMm + 'mm',
+        height: heightMm + 'mm',
+        border: `${Math.max(0.5, cardConfigBorder.borderWidth * scaleFactor)}mm solid ${cardConfigBorder.borderColor}`,
+        borderRadius: `${cardConfigBorder.borderRadius * scaleFactor}mm`,
+        background: cardConfigBorder.backgroundColor || '#fff',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+        overflow: 'hidden',
+        boxSizing: 'border-box',
+        transform: 'scaleX(-1)'
+      }}>
+        {[...versoElements].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).map((el, idx) => {
+          const value = el.value || (el.type === 'image' ? el.src : '');
+          if (el.type === 'text') {
+            return (
+              <div key={idx} style={{
+                position: 'absolute',
+                left: (el.x / designer.tipo.width * 100) + '%',
+                top: (el.y / designer.tipo.height * 100) + '%',
+                width: ((el.width || 150) / designer.tipo.width * 100) + '%',
+                height: ((el.height || 30) / designer.tipo.height * 100) + '%',
+                color: el.color,
+                fontSize: (el.fontSize * scaleFactor) + 'mm',
+                fontFamily: el.fontFamily || 'Arial',
+                textAlign: el.textAlign || 'left',
+                overflow: 'hidden',
+                wordWrap: 'break-word',
+                boxSizing: 'border-box',
+                zIndex: el.zIndex || 0,
+                transform: `scaleX(-1) rotate(${el.rotation || 0}deg)`,
+              }}>
+                {value}
+              </div>
+            );
+          } else if (el.type === 'image' && value) {
+            return (
+              <div key={idx} style={{
+                position: 'absolute',
+                left: el.fullScreen ? 0 : (el.x / designer.tipo.width * 100) + '%',
+                top: el.fullScreen ? 0 : (el.y / designer.tipo.height * 100) + '%',
+                width: el.fullScreen ? '100%' : (el.width / designer.tipo.width * 100) + '%',
+                height: el.fullScreen ? '100%' : (el.height / designer.tipo.height * 100) + '%',
+                zIndex: el.zIndex || 0,
+                transform: 'scaleX(-1)',
+              }}>
+                <img src={value} alt={el.fieldName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              </div>
+            );
+          } else if (el.type === 'shape') {
+            return (
+              <div key={idx} style={{
+                position: 'absolute',
+                left: (el.x / designer.tipo.width * 100) + '%',
+                top: (el.y / designer.tipo.height * 100) + '%',
+                width: ((el.width || 100) / designer.tipo.width * 100) + '%',
+                height: ((el.height || 100) / designer.tipo.height * 100) + '%',
+                backgroundColor: el.fillColor,
+                border: el.hasBorder ? `${el.borderWidth || 2}px solid ${el.borderColor || '#1e40af'}` : 'none',
+                borderRadius: el.shapeType === 'circle' ? '50%' : `${el.borderRadius || 0}px`,
+                zIndex: el.zIndex || 0,
+                boxSizing: 'border-box'
+              }} />
+            );
+          }
+          return null;
+        })}
+      </div>
+    );
+  };
 
   const renderCard = (card) => {
     const cardConfigBorder = designer.cardConfig || { borderRadius: 8, borderWidth: 2, borderColor: '#333' };

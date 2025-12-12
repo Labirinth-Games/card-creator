@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './Skeleton.css';
+import './Designer.css'; // Importar o CSS do Designer
 import { updateDeckDesigner, getAllDecks } from '../utils/firebase';
 import { AlertModal, PromptModal, SelectModal } from './Modal';
 import ImageDropZone from './ImageDropZone';
 import FontSelector from './FontSelector';
 import { 
   FiType, FiImage, FiPlus, FiTrash2, FiCopy, FiLayers, FiArrowUp, FiArrowDown, 
-  FiAlignCenter, FiAlignLeft, FiAlignRight, FiBold, FiItalic, FiUnderline, FiSquare, FiSave, FiAlertCircle, FiMoreVertical, FiDownload, FiUpload, FiRotateCw
+  FiAlignCenter, FiAlignLeft, FiAlignRight, FiAlignJustify, FiBold, FiItalic, FiUnderline, FiSquare, FiSave, FiAlertCircle, FiMoreVertical, FiDownload, FiUpload, FiRotateCw
 } from 'react-icons/fi';
 
 const CARD_TYPES = [
@@ -69,8 +70,26 @@ function Designer({ data, setData }) {
   const inputRef = useRef(null);
   const versoInputRef = useRef(null);
 
+  const handleCanvasMouseDown = (e) => {
+    // Clicked on the canvas background, so deselect everything
+    if (e.target === e.currentTarget) {
+      setEditingElement(null);
+      setEditingVersoElement(null);
+      setEditingTextElement(null);
+      setEditingVersoTextElement(null);
+    }
+  };
+
+  const handleMouseMove = (e) => {
+    // This will be handled by the window event listeners for dragging/resizing
+  };
+
+  const handleMouseUp = (e) => {
+    // This will be handled by the window event listeners for dragging/resizing
+  };
+
   const handleWheel = (e) => {
-    if (e.shiftKey) {
+    if (e.ctrlKey || e.metaKey) { // Use Ctrl or Cmd for zooming
       e.preventDefault();
       const delta = e.deltaY * -0.001;
       setZoom(prevZoom => Math.min(Math.max(prevZoom + delta, 0.1), 5));
@@ -239,6 +258,7 @@ function Designer({ data, setData }) {
         width: 150,
         height: 30,
         textAlign: 'left',
+        verticalAlign: 'center',
         dataType: 'string',
         fontFamily: 'Arial',
         rotation: 0, // Add rotation property
@@ -296,6 +316,7 @@ function Designer({ data, setData }) {
     }
     setShowModal(null);
   }
+
 
   function addShape() {
     if (!currentDesign) {
@@ -390,27 +411,33 @@ function Designer({ data, setData }) {
     return cursors[handle] || 'grab';
   }
 
-  function handleMouseDown(e, idx) {
+  function handleMouseDown(e, idx, isResizeHandle = false) {
     e.stopPropagation();
     e.preventDefault();
     const currentElements = currentSide === 'frente' ? elements : versoElements;
     const el = currentElements[idx];
     const canvasRect = (currentSide === 'frente' ? canvasRef.current : versoCanvasRef.current).getBoundingClientRect();
     
-    const handle = getResizeHandle(e, el, canvasRect);
+    // Only check for resize handle if this is a resize handle click
+    if (isResizeHandle) {
+      const handle = getResizeHandle(e, el, canvasRect);
+      if (handle) {
+        setResizingElement(idx);
+        setResizeHandle(handle);
+        setResizeStart({
+          x: e.clientX,
+          y: e.clientY,
+          width: el.width || 50,
+          height: el.height || 20,
+          elX: el.x,
+          elY: el.y
+        });
+        return;
+      }
+    }
     
-    if (handle) {
-      setResizingElement(idx);
-      setResizeHandle(handle);
-      setResizeStart({
-        x: e.clientX,
-        y: e.clientY,
-        width: el.width || 50,
-        height: el.height || 20,
-        elX: el.x,
-        elY: el.y
-      });
-    } else {
+    // If not a resize handle click, handle dragging
+    if (!isResizeHandle) {
       const elCenterX = el.x + el.width / 2;
       const elCenterY = el.y + el.height / 2;
       const mouseX = (e.clientX - canvasRect.left) / zoom;
@@ -630,13 +657,24 @@ function Designer({ data, setData }) {
   }
 
   function updateElement(idx, field, value) {
-    const newElements = elements.map((el, i) => i === idx ? { ...el, [field]: value } : el);
+    // Accept either an index or an id for idx
+    let resolvedIdx = idx;
+    if (typeof idx === 'string' || (typeof idx === 'number' && !Number.isInteger(idx))) {
+      resolvedIdx = elements.findIndex(el => el.id === idx);
+    }
+    const newElements = elements.map((el, i) => i === resolvedIdx ? { ...el, [field]: value } : el);
     setElements(newElements);
+    setIsDirty(true);
   }
 
   function updateVersoElement(idx, field, value) {
-    const newVersoElements = versoElements.map((el, i) => i === idx ? { ...el, [field]: value } : el);
+    let resolvedIdx = idx;
+    if (typeof idx === 'string' || (typeof idx === 'number' && !Number.isInteger(idx))) {
+      resolvedIdx = versoElements.findIndex(el => el.id === idx);
+    }
+    const newVersoElements = versoElements.map((el, i) => i === resolvedIdx ? { ...el, [field]: value } : el);
     setVersoElements(newVersoElements);
+    setIsDirty(true);
   }
 
   function duplicateElement(idx) {
@@ -668,6 +706,36 @@ function Designer({ data, setData }) {
   function removeVersoElement(idx) {
     setVersoElements(versoElements.filter((_, i) => i !== idx));
     setEditingVersoElement(null);
+  }
+
+  function alignElementToCanvas(id, position) {
+    if (!currentDesign) return;
+    const cardWidth = currentDesign.tipo.width;
+    const cardHeight = currentDesign.tipo.height;
+
+    let found = elements.find(el => el.id === id);
+    let isFrente = true;
+    if (!found) {
+      found = versoElements.find(el => el.id === id);
+      isFrente = false;
+    }
+    if (!found) return;
+
+    let newX = found.x;
+    let newY = found.y;
+    if (position === 'left') newX = 0;
+    else if (position === 'center') newX = (cardWidth - found.width) / 2;
+    else if (position === 'right') newX = Math.max(0, cardWidth - found.width);
+    else if (position === 'top') newY = 0;
+    else if (position === 'middle') newY = (cardHeight - found.height) / 2;
+    else if (position === 'bottom') newY = Math.max(0, cardHeight - found.height);
+
+    if (isFrente) {
+      setElements(prev => prev.map(el => el.id === id ? { ...el, x: newX, y: newY } : el));
+    } else {
+      setVersoElements(prev => prev.map(el => el.id === id ? { ...el, x: newX, y: newY } : el));
+    }
+    setIsDirty(true);
   }
 
   // Funções para drag and drop de camadas
@@ -752,100 +820,212 @@ function Designer({ data, setData }) {
         <div className="prop-header">
           <h4>Editando: {el.fieldName}</h4>
           <div className="prop-actions">
-            <button onClick={() => moveLayer(editingIdx, 'up')} title="Mover para frente"><FiArrowUp /></button>
-            <button onClick={() => moveLayer(editingIdx, 'down')} title="Mover para trás"><FiArrowDown /></button>
-            <button onClick={() => duplicateElement(editingIdx)} title="Duplicar (Ctrl+D)"><FiCopy /></button>
-            <button className="danger" onClick={() => removeFn(editingIdx)} title="Remover"><FiTrash2 /></button>
+            <button className="icon-btn" onClick={() => moveLayer(editingIdx, 'up')} title="Mover para frente"><FiArrowUp /></button>
+            <button className="icon-btn" onClick={() => moveLayer(editingIdx, 'down')} title="Mover para trás"><FiArrowDown /></button>
+            <button className="icon-btn" onClick={() => duplicateElement(editingIdx)} title="Duplicar (Ctrl+D)"><FiCopy /></button>
+            <button className="icon-btn danger" onClick={() => removeFn(editingIdx)} title="Remover"><FiTrash2 /></button>
           </div>
         </div>
 
-        <div className="prop-group">
+        <div className="property-group">
           <label>Nome do Campo</label>
           <input type="text" value={el.fieldName} onChange={e => updateFn(editingIdx, 'fieldName', e.target.value)} />
         </div>
 
-        <div className="prop-grid">
-          <div className="prop-group">
-            <label>X</label>
-            <input type="number" value={Math.round(el.x)} onChange={e => updateFn(editingIdx, 'x', Number(e.target.value))} />
-          </div>
-          <div className="prop-group">
-            <label>Y</label>
-            <input type="number" value={Math.round(el.y)} onChange={e => updateFn(editingIdx, 'y', Number(e.target.value))} />
-          </div>
-          <div className="prop-group">
-            <label>Largura</label>
-            <input type="number" value={Math.round(el.width)} onChange={e => updateFn(editingIdx, 'width', Number(e.target.value))} />
-          </div>
-          <div className="prop-group">
-            <label>Altura</label>
-            <input type="number" value={Math.round(el.height)} onChange={e => updateFn(editingIdx, 'height', Number(e.target.value))} />
+        <div className="property-group">
+          <h5>Posição e Tamanho</h5>
+          <div className="property-grid">
+            <div className="property-item">
+              <label>X</label>
+              <input type="number" value={Math.round(el.x)} onChange={e => updateFn(editingIdx, 'x', Number(e.target.value))} />
+            </div>
+            <div className="property-item">
+              <label>Y</label>
+              <input type="number" value={Math.round(el.y)} onChange={e => updateFn(editingIdx, 'y', Number(e.target.value))} />
+            </div>
+            <div className="property-item">
+              <label>Largura</label>
+              <input type="number" value={Math.round(el.width)} onChange={e => updateFn(editingIdx, 'width', Number(e.target.value))} />
+            </div>
+            <div className="property-item">
+              <label>Altura</label>
+              <input type="number" value={Math.round(el.height)} onChange={e => updateFn(editingIdx, 'height', Number(e.target.value))} />
+            </div>
           </div>
         </div>
 
         {el.type === 'text' && (
           <>
-            <div className="prop-group">
-              <label>Fonte</label>
-              <FontSelector
-                selectedFont={el.fontFamily}
-                onSelectFont={font => updateFn(editingIdx, 'fontFamily', font)}
-                customFonts={customFonts}
-                onCustomFontsChange={setCustomFonts}
-              />
-            </div>
-            <div className="prop-grid">
-              <div className="prop-group">
-                <label>Tamanho</label>
-                <input type="number" value={el.fontSize} onChange={e => updateFn(editingIdx, 'fontSize', Number(e.target.value))} />
-              </div>
-              <div className="prop-group">
-                <label>Cor</label>
-                <input type="color" value={el.color} onChange={e => updateFn(editingIdx, 'color', e.target.value)} />
-              </div>
-            </div>
-            <div className="prop-group">
-              <label>Alinhamento</label>
-              <div className="button-group">
-                <button className={el.textAlign === 'left' ? 'active' : ''} onClick={() => updateFn(editingIdx, 'textAlign', 'left')}><FiAlignLeft /></button>
-                <button className={el.textAlign === 'center' ? 'active' : ''} onClick={() => updateFn(editingIdx, 'textAlign', 'center')}><FiAlignCenter /></button>
-                <button className={el.textAlign === 'right' ? 'active' : ''} onClick={() => updateFn(editingIdx, 'textAlign', 'right')}><FiAlignRight /></button>
-              </div>
-            </div>
-            <div className="prop-group">
-              <label>Estilo</label>
-              <div className="button-group">
-                <button className={el.fontWeight === 'bold' ? 'active' : ''} onClick={() => updateFn(editingIdx, 'fontWeight', el.fontWeight === 'bold' ? 'normal' : 'bold')}><FiBold /></button>
-                <button className={el.fontStyle === 'italic' ? 'active' : ''} onClick={() => updateFn(editingIdx, 'fontStyle', el.fontStyle === 'italic' ? 'normal' : 'italic')}><FiItalic /></button>
-                <button className={el.textDecoration === 'underline' ? 'active' : ''} onClick={() => updateFn(editingIdx, 'textDecoration', el.textDecoration === 'underline' ? 'none' : 'underline')}><FiUnderline /></button>
-              </div>
-            </div>
-            <div className="prop-group">
-              <label>Tipo de Dado (para tabela)</label>
-              <select value={el.dataType} onChange={e => updateFn(editingIdx, 'dataType', e.target.value)}>
-                <option value="string">Texto Curto</option>
-                <option value="text">Texto Longo</option>
-                <option value="number">Número</option>
-              </select>
-            </div>
-            <div className="prop-group">
-              <label>Rotação (°)</label>
-              <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
-                <input 
-                  type="range" 
-                  min="-180" 
-                  max="180" 
-                  value={el.rotation || 0} 
-                  onChange={e => updateFn(editingIdx, 'rotation', Number(e.target.value))}
-                  style={{flexGrow: 1}}
+            <div className="property-group">
+              <h5>Texto</h5>
+              <div className="property-item full-width">
+                <label>Fonte</label>
+                <FontSelector
+                  selectedFont={el.fontFamily}
+                  onSelectFont={font => updateFn(editingIdx, 'fontFamily', font)}
+                  customFonts={customFonts}
+                  onCustomFontsChange={setCustomFonts}
                 />
-                <input 
-                  type="number" 
-                  value={el.rotation || 0} 
-                  onChange={e => updateFn(editingIdx, 'rotation', Number(e.target.value))}
-                  style={{width: 70}}
-                />
-                <button onClick={() => updateFn(editingIdx, 'rotation', 0)} title="Resetar Rotação"><FiRotateCw /></button>
+              </div>
+              <div className="property-grid">
+                <div className="property-item">
+                  <label>Tamanho</label>
+                  <input type="number" value={el.fontSize} onChange={e => updateFn(editingIdx, 'fontSize', Number(e.target.value))} />
+                </div>
+                <div className="property-item">
+                  <label>Cor</label>
+                  <div className="color-input-wrapper">
+                    <input type="color" value={el.color} onChange={e => updateFn(editingIdx, 'color', e.target.value)} />
+                    <input type="text" value={el.color} onChange={e => updateFn(editingIdx, 'color', e.target.value)} />
+                  </div>
+                </div>
+              <div className="property-item full-width">
+                <label>Alinhamento</label>
+                <div className="font-style-buttons">
+                  <button 
+                    type="button" 
+                    className={`icon-btn ${el.textAlign === 'left' ? 'active' : ''}`} 
+                    onClick={(e) => { 
+                      e.preventDefault(); 
+                      e.stopPropagation(); 
+                      updateFn(editingIdx, 'textAlign', 'left'); 
+                    }}
+                  >
+                    <FiAlignLeft />
+                  </button>
+                  <button 
+                    type="button" 
+                    className={`icon-btn ${el.textAlign === 'center' ? 'active' : ''}`} 
+                    onClick={(e) => { 
+                      e.preventDefault(); 
+                      e.stopPropagation(); 
+                      updateFn(editingIdx, 'textAlign', 'center'); 
+                    }}
+                  >
+                    <FiAlignCenter />
+                  </button>
+                  <button 
+                    type="button" 
+                    className={`icon-btn ${el.textAlign === 'right' ? 'active' : ''}`} 
+                    onClick={(e) => { 
+                      e.preventDefault(); 
+                      e.stopPropagation(); 
+                      updateFn(editingIdx, 'textAlign', 'right'); 
+                    }}
+                  >
+                    <FiAlignRight />
+                  </button>
+                  <button
+                    type="button"
+                    className={`icon-btn ${el.textAlign === 'justify' ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      updateFn(editingIdx, 'textAlign', 'justify');
+                    }}
+                  >
+                    <FiAlignJustify />
+                  </button>
+                </div>
+              </div>
+              <div className="property-item full-width">
+                <label>Alinhamento Vertical</label>
+                <div className="font-style-buttons">
+                  <button type="button" title="Alinhar ao topo" className={`icon-btn ${el.verticalAlign === 'top' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); updateFn(editingIdx, 'verticalAlign', 'top'); }}>
+                    <FiArrowUp />
+                  </button>
+                  <button type="button" title="Alinhar ao meio" className={`icon-btn ${el.verticalAlign === 'center' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); updateFn(editingIdx, 'verticalAlign', 'center'); }}>
+                    <FiAlignCenter />
+                  </button>
+                  <button type="button" title="Alinhar à base" className={`icon-btn ${el.verticalAlign === 'bottom' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); updateFn(editingIdx, 'verticalAlign', 'bottom'); }}>
+                    <FiArrowDown />
+                  </button>
+                </div>
+              </div>
+              <div className="property-item full-width">
+                <label>Alinhar Elemento</label>
+                <div style={{display: 'flex', gap: 8}}>
+                  <div style={{display: 'flex', gap: 4}}>
+                    <button className="icon-btn" type="button" title="Alinhar caixa à esquerda" onClick={() => alignElementToCanvas(el.id, 'left')}><FiAlignLeft /></button>
+                    <button className="icon-btn" type="button" title="Alinhar caixa ao centro" onClick={() => alignElementToCanvas(el.id, 'center')}><FiAlignCenter /></button>
+                    <button className="icon-btn" type="button" title="Alinhar caixa à direita" onClick={() => alignElementToCanvas(el.id, 'right')}><FiAlignRight /></button>
+                  </div>
+                  <div style={{display: 'flex', gap: 4}}>
+                    <button className="icon-btn" type="button" title="Alinhar caixa ao topo" onClick={() => alignElementToCanvas(el.id, 'top')}><FiArrowUp /></button>
+                    <button className="icon-btn" type="button" title="Alinhar caixa ao meio" onClick={() => alignElementToCanvas(el.id, 'middle')}><FiAlignCenter /></button>
+                    <button className="icon-btn" type="button" title="Alinhar caixa à base" onClick={() => alignElementToCanvas(el.id, 'bottom')}><FiArrowDown /></button>
+                  </div>
+                </div>
+              </div>
+              </div>
+              <div className="property-item full-width">
+                <label>Estilo</label>
+                <div className="font-style-buttons">
+                  <button 
+                    type="button" 
+                    className={`icon-btn ${el.fontWeight === 'bold' ? 'active' : ''}`} 
+                    onClick={(e) => { 
+                      e.preventDefault(); 
+                      e.stopPropagation(); 
+                      updateFn(editingIdx, 'fontWeight', el.fontWeight === 'bold' ? 'normal' : 'bold'); 
+                    }}
+                  >
+                    <FiBold />
+                  </button>
+                  <button 
+                    type="button" 
+                    className={`icon-btn ${el.fontStyle === 'italic' ? 'active' : ''}`} 
+                    onClick={(e) => { 
+                      e.preventDefault(); 
+                      e.stopPropagation(); 
+                      updateFn(editingIdx, 'fontStyle', el.fontStyle === 'italic' ? 'normal' : 'italic'); 
+                    }}
+                  >
+                    <FiItalic />
+                  </button>
+                  <button 
+                    type="button" 
+                    className={`icon-btn ${el.textDecoration === 'underline' ? 'active' : ''}`} 
+                    onClick={(e) => { 
+                      e.preventDefault(); 
+                      e.stopPropagation(); 
+                      updateFn(editingIdx, 'textDecoration', el.textDecoration === 'underline' ? 'none' : 'underline'); 
+                    }}
+                  >
+                    <FiUnderline />
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="property-group">
+              <h5>Configurações Avançadas</h5>
+              <div className="property-item full-width">
+                <label>Tipo de Dado (para tabela)</label>
+                <select value={el.dataType} onChange={e => updateFn(editingIdx, 'dataType', e.target.value)}>
+                  <option value="string">Texto Curto</option>
+                  <option value="text">Texto Longo</option>
+                  <option value="number">Número</option>
+                </select>
+              </div>
+              <div className="property-item full-width">
+                <label>Rotação (°)</label>
+                <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+                  <input 
+                    type="range" 
+                    min="-180" 
+                    max="180" 
+                    value={el.rotation || 0} 
+                    onChange={e => updateFn(editingIdx, 'rotation', Number(e.target.value))}
+                    style={{flexGrow: 1}}
+                  />
+                  <input 
+                    type="number" 
+                    value={el.rotation || 0} 
+                    onChange={e => updateFn(editingIdx, 'rotation', Number(e.target.value))}
+                    style={{width: 70}}
+                  />
+                  <button className="icon-btn" onClick={() => updateFn(editingIdx, 'rotation', 0)} title="Resetar Rotação"><FiRotateCw /></button>
+                </div>
               </div>
             </div>
           </>
@@ -853,63 +1033,73 @@ function Designer({ data, setData }) {
 
         {el.type === 'image' && (
           <>
-            <div className="prop-group">
-              <label>Fonte da Imagem</label>
-              <ImageDropZone
-                value={el.src}
-                onChange={src => updateFn(editingIdx, 'src', src)}
-                placeholder="Arraste uma imagem ou cole a URL"
-              />
-            </div>
-            <div className="prop-group checkbox">
-              <input type="checkbox" id="isDefault" checked={el.isDefault} onChange={e => updateFn(editingIdx, 'isDefault', e.target.checked)} />
-              <label htmlFor="isDefault">Imagem Padrão (não aparece na tabela)</label>
+            <div className="property-group">
+              <h5>Imagem</h5>
+              <div className="property-item full-width">
+                <label>Fonte da Imagem</label>
+                <ImageDropZone
+                  value={el.src}
+                  onChange={src => updateFn(editingIdx, 'src', src)}
+                  placeholder="Arraste uma imagem ou cole a URL"
+                />
+              </div>
+              <div className="property-item checkbox full-width">
+                <input type="checkbox" id="isDefault" checked={el.isDefault} onChange={e => updateFn(editingIdx, 'isDefault', e.target.checked)} />
+                <label htmlFor="isDefault">Imagem Padrão (não aparece na tabela)</label>
+              </div>
             </div>
           </>
         )}
 
         {el.type === 'shape' && (
           <>
-            <div className="prop-group">
-              <label>Tipo de Forma</label>
-              <select value={el.shapeType || 'rectangle'} onChange={e => updateFn(editingIdx, 'shapeType', e.target.value)}>
-                <option value="rectangle">Retângulo</option>
-                <option value="circle">Círculo</option>
-              </select>
-            </div>
-            <div className="prop-group">
-              <label>Cor de Preenchimento</label>
-              <input type="color" value={el.fillColor || '#3b82f6'} onChange={e => updateFn(editingIdx, 'fillColor', e.target.value)} />
-            </div>
-            <div className="prop-group checkbox">
-              <input 
-                type="checkbox" 
-                id="hasBorder" 
-                checked={el.hasBorder || false} 
-                onChange={e => updateFn(editingIdx, 'hasBorder', e.target.checked)} 
-              />
-              <label htmlFor="hasBorder">Adicionar Borda</label>
-            </div>
-            {el.hasBorder && (
-              <>
-                <div className="prop-grid">
-                  <div className="prop-group">
+            <div className="property-group">
+              <h5>Forma</h5>
+              <div className="property-item full-width">
+                <label>Tipo de Forma</label>
+                <select value={el.shapeType || 'rectangle'} onChange={e => updateFn(editingIdx, 'shapeType', e.target.value)}>
+                  <option value="rectangle">Retângulo</option>
+                  <option value="circle">Círculo</option>
+                </select>
+              </div>
+              <div className="property-item full-width">
+                <label>Cor de Preenchimento</label>
+                <div className="color-input-wrapper">
+                  <input type="color" value={el.fillColor || '#3b82f6'} onChange={e => updateFn(editingIdx, 'fillColor', e.target.value)} />
+                  <input type="text" value={el.fillColor || '#3b82f6'} onChange={e => updateFn(editingIdx, 'fillColor', e.target.value)} />
+                </div>
+              </div>
+              <div className="property-item checkbox full-width">
+                <input 
+                  type="checkbox" 
+                  id="hasBorder" 
+                  checked={el.hasBorder || false} 
+                  onChange={e => updateFn(editingIdx, 'hasBorder', e.target.checked)} 
+                />
+                <label htmlFor="hasBorder">Adicionar Borda</label>
+              </div>
+              {el.hasBorder && (
+                <div className="property-grid">
+                  <div className="property-item">
                     <label>Cor da Borda</label>
-                    <input type="color" value={el.borderColor || '#1e40af'} onChange={e => updateFn(editingIdx, 'borderColor', e.target.value)} />
+                    <div className="color-input-wrapper">
+                      <input type="color" value={el.borderColor || '#1e40af'} onChange={e => updateFn(editingIdx, 'borderColor', e.target.value)} />
+                      <input type="text" value={el.borderColor || '#1e40af'} onChange={e => updateFn(editingIdx, 'borderColor', e.target.value)} />
+                    </div>
                   </div>
-                  <div className="prop-group">
-                    <label>Espessura da Borda</label>
+                  <div className="property-item">
+                    <label>Espessura</label>
                     <input type="number" min="0" value={el.borderWidth || 2} onChange={e => updateFn(editingIdx, 'borderWidth', Number(e.target.value))} />
                   </div>
                 </div>
-              </>
-            )}
-            {el.shapeType !== 'circle' && (
-              <div className="prop-group">
-                <label>Arredondamento</label>
-                <input type="number" min="0" value={el.borderRadius || 0} onChange={e => updateFn(editingIdx, 'borderRadius', Number(e.target.value))} />
-              </div>
-            )}
+              )}
+              {el.shapeType !== 'circle' && (
+                <div className="property-item full-width">
+                  <label>Arredondamento</label>
+                  <input type="number" min="0" value={el.borderRadius || 0} onChange={e => updateFn(editingIdx, 'borderRadius', Number(e.target.value))} />
+                </div>
+              )}
+            </div>
           </>
         )}
       </div>
@@ -920,528 +1110,300 @@ function Designer({ data, setData }) {
     return (
       <div className="property-editor">
         <h4>Configurações da Carta</h4>
-        <div className="prop-grid">
-          <div className="prop-group">
+        <div className="property-group">
+          <div className="property-item full-width">
             <label>Cor de Fundo</label>
-            <input type="color" value={cardConfig.backgroundColor} onChange={e => setCardConfig({...cardConfig, backgroundColor: e.target.value})} />
+            <div className="color-input-wrapper">
+              <input type="color" value={cardConfig.backgroundColor} onChange={e => setCardConfig({...cardConfig, backgroundColor: e.target.value})} />
+              <input type="text" value={cardConfig.backgroundColor} onChange={e => setCardConfig({...cardConfig, backgroundColor: e.target.value})} />
+            </div>
           </div>
-          <div className="prop-group">
+          <div className="property-item full-width">
             <label>Cor da Borda</label>
-            <input type="color" value={cardConfig.borderColor} onChange={e => setCardConfig({...cardConfig, borderColor: e.target.value})} />
+            <div className="color-input-wrapper">
+              <input type="color" value={cardConfig.borderColor} onChange={e => setCardConfig({...cardConfig, borderColor: e.target.value})} />
+              <input type="text" value={cardConfig.borderColor} onChange={e => setCardConfig({...cardConfig, borderColor: e.target.value})} />
+            </div>
           </div>
-          <div className="prop-group">
-            <label>Largura da Borda (px)</label>
-            <input type="number" min="0" value={cardConfig.borderWidth} onChange={e => setCardConfig({...cardConfig, borderWidth: Number(e.target.value)})} />
-          </div>
-          <div className="prop-group">
-            <label>Raio da Borda (px)</label>
-            <input type="number" min="0" value={cardConfig.borderRadius} onChange={e => setCardConfig({...cardConfig, borderRadius: Number(e.target.value)})} />
+          <div className="property-grid">
+            <div className="property-item">
+              <label>Largura da Borda</label>
+              <input type="number" min="0" value={cardConfig.borderWidth} onChange={e => setCardConfig({...cardConfig, borderWidth: Number(e.target.value)})} />
+            </div>
+            <div className="property-item">
+              <label>Raio da Borda</label>
+              <input type="number" min="0" value={cardConfig.borderRadius} onChange={e => setCardConfig({...cardConfig, borderRadius: Number(e.target.value)})} />
+            </div>
           </div>
         </div>
       </div>
     );
   };
 
-  return (
-    <div className="designer-container">
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:16,marginBottom:8}}>
-        <h2 style={{margin:0}}>Designer de Carta</h2>
-        <div style={{display:'flex',alignItems:'center',gap:8,position:'relative'}}>
-          <button
-            onClick={saveDesigner}
-            disabled={isSaving || !isDirty}
-            className={`primary${isDirty ? ' unsaved' : ''}`}
-            title={isDirty ? 'Existem alterações não salvas' : 'Tudo salvo'}
-            style={{minWidth:160}}
-          >
-            {isSaving ? (
-              <><FiSave style={{verticalAlign:'middle'}} /> Salvando...</>
-            ) : (
-              <><FiSave style={{verticalAlign:'middle'}} /> Salvar Designer</>
-            )}
-            {isDirty && !isSaving && (
-              <span style={{color:'#eab308',marginLeft:8,verticalAlign:'middle'}} title="Existem alterações não salvas"><FiAlertCircle /></span>
-            )}
-          </button>
-          <button style={{marginLeft:8}} onClick={()=>setShowMenu(v=>!v)} title="Mais opções"><FiMoreVertical size={22}/></button>
-          {showMenu && (
-            <div style={{
-              position: 'absolute',
-              top: '110%',
-              right: 0,
-              background: 'rgba(255,255,255,0.98)',
-              boxShadow: '0 2px 12px rgba(0,0,0,0.18)',
-              borderRadius: 10,
-              zIndex: 100,
-              minWidth: 170,
-              padding: '10px 0',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 6,
-              border: '1px solid #ececec'
-            }}>
-              <button style={{
+  const renderElement = (el, idx) => {
+    const isFrente = currentSide === 'frente';
+    const isEditing = isFrente ? editingElement === idx : editingVersoElement === idx;
+    const isTextEditing = isFrente ? editingTextElement === idx : editingVersoTextElement === idx;
+    const cursor = elementCursors[el.id] || (isEditing ? 'move' : 'pointer');
+
+    const baseStyle = {
+      position: 'absolute',
+      left: el.x,
+      top: el.y,
+      width: el.width,
+      height: el.height,
+      cursor,
+      border: isEditing ? '2px dashed #6366f1' : 'none',
+      boxSizing: 'border-box',
+      zIndex: el.zIndex || 0,
+      transform: `rotate(${el.rotation || 0}deg)`,
+      transformOrigin: 'center center'
+    };
+
+    const renderResizeHandles = () => {
+      if (!isEditing) return null;
+      return (
+        <>
+          <div className="resize-handle nw" onMouseDown={(e) => { e.stopPropagation(); handleMouseDown(e, idx, true); }} />
+          <div className="resize-handle ne" onMouseDown={(e) => { e.stopPropagation(); handleMouseDown(e, idx, true); }} />
+          <div className="resize-handle sw" onMouseDown={(e) => { e.stopPropagation(); handleMouseDown(e, idx, true); }} />
+          <div className="resize-handle se" onMouseDown={(e) => { e.stopPropagation(); handleMouseDown(e, idx, true); }} />
+          <div className="resize-handle n" onMouseDown={(e) => { e.stopPropagation(); handleMouseDown(e, idx, true); }} />
+          <div className="resize-handle s" onMouseDown={(e) => { e.stopPropagation(); handleMouseDown(e, idx, true); }} />
+          <div className="resize-handle w" onMouseDown={(e) => { e.stopPropagation(); handleMouseDown(e, idx, true); }} />
+          <div className="resize-handle e" onMouseDown={(e) => { e.stopPropagation(); handleMouseDown(e, idx, true); }} />
+        </>
+      );
+    };
+
+    if (el.type === 'text') {
+      return (
+        <div
+          key={el.id}
+          style={{
+            ...baseStyle,
+            color: el.color,
+            fontSize: `${el.fontSize}px`,
+            fontFamily: el.fontFamily || 'Arial',
+            fontWeight: el.fontWeight || 'normal',
+            fontStyle: el.fontStyle || 'normal',
+            textDecoration: el.textDecoration || 'none',
+            display: 'flex',
+            alignItems: (function() {
+              const v = el.verticalAlign || 'center';
+              return v === 'top' ? 'flex-start' : (v === 'bottom' ? 'flex-end' : 'center');
+            })(),
+            justifyContent: (function() {
+              const h = el.textAlign || 'left';
+              return h === 'left' ? 'flex-start' : (h === 'center' ? 'center' : (h === 'right' ? 'flex-end' : 'flex-start'));
+            })(),
+            padding: '4px',
+            userSelect: 'none',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word'
+          }}
+          onMouseDown={e => handleMouseDown(e, idx)}
+          onDoubleClick={e => handleDoubleClick(e, idx)}
+        >
+          {isTextEditing ? (
+            <input
+              ref={isFrente ? inputRef : versoInputRef}
+              type="text"
+              value={el.value}
+              onChange={e => handleTextChange(idx, e.target.value)}
+              onBlur={finishEditingText}
+              style={{
                 width: '100%',
-                justifyContent: 'flex-start',
-                gap: 10,
-                padding: '10px 18px',
-                background: 'none',
+                height: '100%',
                 border: 'none',
-                borderRadius: 0,
-                textAlign: 'left',
-                fontSize: 15,
-                cursor: 'pointer',
-                transition: 'background 0.15s',
-                outline: 'none',
-                color: '#222',
-                fontWeight: 500
+                background: 'transparent',
+                color: el.color,
+                fontSize: `${el.fontSize}px`,
+                fontFamily: el.fontFamily || 'Arial',
+                textAlign: el.textAlign || 'left',
+                outline: 'none'
               }}
-                onClick={()=>{setShowMenu(false); /* TODO: export logic */}}
-                onMouseOver={e=>{e.currentTarget.style.background='#f5f5f5';e.currentTarget.style.color='#1e40af';}}
-                onMouseOut={e=>{e.currentTarget.style.background='none';e.currentTarget.style.color='#222';}}
-              ><FiDownload style={{color:'#1e40af'}}/> Exportar</button>
-              <button style={{
-                width: '100%',
-                justifyContent: 'flex-start',
-                gap: 10,
-                padding: '10px 18px',
-                background: 'none',
-                border: 'none',
-                borderRadius: 0,
-                textAlign: 'left',
-                fontSize: 15,
-                cursor: 'pointer',
-                transition: 'background 0.15s',
-                outline: 'none',
-                color: '#222',
-                fontWeight: 500
-              }}
-                onClick={()=>{setShowMenu(false); /* TODO: import logic */}}
-                onMouseOver={e=>{e.currentTarget.style.background='#f5f5f5';e.currentTarget.style.color='#1e40af';}}
-                onMouseOut={e=>{e.currentTarget.style.background='none';e.currentTarget.style.color='#222';}}
-              ><FiUpload style={{color:'#1e40af'}}/> Importar</button>
-              <button style={{
-                width: '100%',
-                justifyContent: 'flex-start',
-                gap: 10,
-                padding: '10px 18px',
-                background: 'none',
-                border: 'none',
-                borderRadius: 0,
-                textAlign: 'left',
-                fontSize: 15,
-                cursor: 'pointer',
-                transition: 'background 0.15s',
-                outline: 'none',
-                color: '#222',
-                fontWeight: 500
-              }}
-                onClick={()=>{setShowMenu(false); setShowHotkeys(true);}}
-                onMouseOver={e=>{e.currentTarget.style.background='#f5f5f5';e.currentTarget.style.color='#1e40af';}}
-                onMouseOut={e=>{e.currentTarget.style.background='none';e.currentTarget.style.color='#222';}}
-              ><span style={{width:18,display:'inline-block',color:'#1e40af'}}>?</span> Hotkeys</button>
-            </div>
+            />
+          ) : (
+            el.value
           )}
+          {renderResizeHandles()}
         </div>
-      </div>
-      {isDirty && !isSaving && (
-        <div style={{color:'#eab308',fontSize:12,marginTop:-8,marginBottom:8,display:'flex',alignItems:'center',gap:4,justifyContent:'flex-end'}}>
-          <FiAlertCircle /> Existem alterações não salvas
+      );
+    }
+
+    if (el.type === 'image') {
+      return (
+        <div
+          key={el.id}
+          style={baseStyle}
+          onMouseDown={e => handleMouseDown(e, idx)}
+        >
+          <img src={el.src || ''} alt={el.fieldName} style={{ width: '100%', height: '100%', objectFit: el.fullScreen ? 'cover' : 'contain', pointerEvents: 'none' }} />
+          {renderResizeHandles()}
         </div>
-      )}
-      {loadingDesigner ? (
-        <div className="designer-placeholder">
-          <div style={{width: '100%', display: 'flex', gap: 16}}>
-            <div style={{flex: 1}}>
-              <div className="skeleton title" style={{width: '50%', marginBottom: 12}} />
-              <div className="skeleton block" style={{height: 220}} />
-            </div>
-            <div style={{width: 320}}>
-              <div className="skeleton title" style={{width: '80%', marginBottom: 12}} />
-              <div className="skeleton-grid">
-                {Array.from({length:6}).map((_,i) => (
-                  <div key={i} className="skeleton row" />
-                ))}
-              </div>
-            </div>
-          </div>
+      );
+    }
+
+    if (el.type === 'shape') {
+      const shapeStyle = {
+        ...baseStyle,
+        backgroundColor: el.fillColor || '#3b82f6',
+        border: isEditing ? '2px dashed #6366f1' : (el.hasBorder ? `${el.borderWidth || 2}px solid ${el.borderColor || '#1e40af'}` : 'none'),
+        borderRadius: el.shapeType === 'circle' ? '50%' : `${el.borderRadius || 0}px`
+      };
+
+      return (
+        <div
+          key={el.id}
+          style={shapeStyle}
+          onMouseDown={e => handleMouseDown(e, idx)}
+        >
+          {renderResizeHandles()}
         </div>
-      ) : !currentDesign ? (
-        <div className="designer-placeholder">
-          <p>Nenhum designer de carta selecionado para este deck.</p>
-          <button onClick={createDesigner}><FiPlus /> Criar Novo Designer</button>
+      );
+    }
+
+    return null;
+  };
+
+  const renderPropertiesPanel = () => {
+    const isFrente = currentSide === 'frente';
+    const editingIdx = isFrente ? editingElement : editingVersoElement;
+    
+    if (editingIdx === null) {
+      return renderCardConfigEditor();
+    }
+    
+    return renderPropertyEditor();
+  };
+
+  return (
+    <div className="designer-view">
+      {!currentDesign ? (
+        <div className="no-designer-placeholder">
+          <h3>Nenhum Design Selecionado</h3>
+          <p>Crie um novo design para começar a personalizar suas cartas.</p>
+          <button onClick={createDesigner}><FiPlus /> Criar Design</button>
         </div>
       ) : (
-        <div className="designer-layout">
-          <div className="designer-content-wrapper">
-            <div className="designer-toolbar">
-              <div className="toolbar-section">
-                <p>Adicionar Elementos</p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <button onClick={addText}><FiType /> Texto</button>
-                  <button onClick={addImage}><FiImage /> Imagem</button>
-                  <button onClick={addShape}><FiSquare /> Forma</button>
-                </div>
-              </div>
-              <div className="toolbar-section">
-                {/* Botão de salvar movido para o topo */}
-              </div>
-              <div className="toolbar-section">
-                <p>Lado da Carta</p>
-                <div className="button-group">
-                  <button className={currentSide === 'frente' ? 'active' : ''} onClick={() => { if (isDirty) saveDesigner(); setCurrentSide('frente'); }}>Frente</button>
-                  <button className={currentSide === 'verso' ? 'active' : ''} onClick={() => { if (isDirty) saveDesigner(); setCurrentSide('verso'); }}>Verso</button>
-                </div>
-              </div>
-              <div className="toolbar-section">
-                <p>Camadas</p>
-                <div className="layer-list">
-                  {[...(currentSide === 'frente' ? elements : versoElements)]
-                    .sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0))
-                    .map((el) => {
-                      const originalIndex = (currentSide === 'frente' ? elements : versoElements).findIndex(item => item.id === el.id);
-                      const isEditing = originalIndex === (currentSide === 'frente' ? editingElement : editingVersoElement);
-                      const isDragging = draggingLayerIndex === originalIndex;
-                      return (
-                        <div 
-                          key={el.id} 
-                          className={`layer-item ${isEditing ? 'editing' : ''} ${isDragging ? 'dragging' : ''}`}
-                          draggable
-                          onDragStart={(e) => handleLayerDragStart(e, originalIndex)}
-                          onDragOver={handleLayerDragOver}
-                          onDrop={(e) => handleLayerDrop(e, originalIndex)}
-                          onDragEnd={handleLayerDragEnd}
-                          onClick={() => {
-                            if (currentSide === 'frente') {
-                              setEditingElement(originalIndex);
-                              setEditingVersoElement(null);
-                            } else {
-                              setEditingVersoElement(originalIndex);
-                              setEditingElement(null);
-                            }
-                          }}
-                        >
-                          <FiLayers style={{ flexShrink: 0 }} />
-                          <span className="layer-name">{el.fieldName}</span>
+        <>
+          <div className="designer-controls">
+            {/* Controles do lado esquerdo (elementos) */}
+            <div className="control-group">
+              <button className="icon-btn" onClick={addText} title="Adicionar Campo de Texto (T)"><FiType /></button>
+              <button className="icon-btn" onClick={addImage} title="Adicionar Imagem (I)"><FiImage /></button>
+              <button className="icon-btn" onClick={addShape} title="Adicionar Forma (S)"><FiSquare /></button>
+            </div>
+
+            {/* Controles centrais (zoom, lado) */}
+            <div className="control-group">
+              <button className="icon-btn" onClick={() => setZoom(z => Math.max(0.1, z - 0.1))}>-</button>
+              <span className="zoom-level" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</span>
+              <button className="icon-btn" onClick={() => setZoom(z => Math.min(5, z + 0.1))}>+</button>
+              <button 
+                onClick={() => setCurrentSide(s => s === 'frente' ? 'verso' : 'frente')} 
+                className={`icon-btn ${currentSide === 'verso' ? 'active' : ''}`}
+                title="Alternar Frente/Verso (V)"
+              >
+                <FiRotateCw />
+              </button>
+            </div>
+
+            {/* Controles do lado direito (salvar) */}
+            <div className="control-group">
+              <button 
+                onClick={saveDesigner} 
+                disabled={!isDirty || isSaving} 
+                className={`icon-btn ${isDirty ? 'save-button-dirty' : 'save-button-saved'}`}
+                title={isSaving ? 'Salvando...' : (isDirty ? 'Salvar Alterações' : 'Salvo')}
+              >
+                <FiSave />
+              </button>
+            </div>
+          </div>
+
+          <div className="main-designer-area" onWheel={handleWheel}>
+            <div className="layers-panel">
+              <h4><FiLayers /> Camadas</h4>
+              <div className="layer-list">
+                {(currentSide === 'frente' ? elements : versoElements)
+                  .slice()
+                  .sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0))
+                  .map((el, sortedIdx) => {
+                    const originalIndex = (currentSide === 'frente' ? elements : versoElements).findIndex(e => e.id === el.id);
+                    return (
+                      <div 
+                        key={el.id} 
+                        className={`layer-item ${editingElement === originalIndex || editingVersoElement === originalIndex ? 'active' : ''}`}
+                        onClick={() => currentSide === 'frente' ? setEditingElement(originalIndex) : setEditingVersoElement(originalIndex)}
+                      >
+                        <span>{el.fieldName || `Elemento ${originalIndex + 1}`}</span>
+                        <div className="layer-actions">
+                          <button onClick={() => moveLayer(originalIndex, 1)}><FiArrowUp size={14}/></button>
+                          <button onClick={() => moveLayer(originalIndex, -1)}><FiArrowDown size={14}/></button>
                         </div>
-                      );
-                    })}
-                </div>
-              </div>
-               <div className="toolbar-section">
-                <p>Config. da Carta</p>
-                <button onClick={() => { setEditingElement(null); setEditingVersoElement(null); }}>Editar Aparência</button>
+                      </div>
+                    );
+                })}
               </div>
             </div>
 
-            <div className="designer-canvas-area" onWheel={handleWheel}>
+            <div className="canvas-container" ref={currentSide === 'frente' ? canvasRef : versoCanvasRef}>
               <div
-                ref={canvasRef}
                 className="card-canvas"
                 style={{
                   width: currentDesign.tipo.width,
                   height: currentDesign.tipo.height,
+                  transform: `scale(${zoom})`,
+                  transformOrigin: 'top left',
                   backgroundColor: cardConfig.backgroundColor,
                   borderRadius: `${cardConfig.borderRadius}px`,
                   border: `${cardConfig.borderWidth}px solid ${cardConfig.borderColor}`,
-                  display: currentSide === 'frente' ? 'block' : 'none',
-                  transform: `scale(${zoom})`,
-                  transformOrigin: 'center center'
+                  boxSizing: 'border-box',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  boxShadow: '0 10px 25px rgba(0,0,0,0.1)'
                 }}
+                onMouseDown={handleCanvasMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
               >
-                {elements.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).map((el, i) => {
-                  const originalIndex = elements.findIndex(item => item.id === el.id);
-                  const isEditing = editingElement === originalIndex;
-                  const isEditingText = editingTextElement === originalIndex;
-                  const isResizing = resizingElement === originalIndex;
-                  const cursor = isResizing ? getCursorForHandle(resizeHandle) : 'grab';
-
-                  return (
-                    <div
-                      key={el.id}
-                      onMouseDown={e => handleMouseDown(e, originalIndex)}
-                      onDoubleClick={e => handleDoubleClick(e, originalIndex)}
-                      style={{
-                        position: 'absolute',
-                        left: el.x,
-                        top: el.y,
-                        width: el.width,
-                        height: el.height,
-                        border: isEditing ? '2px dashed var(--primary-color)' : 'none',
-                        cursor: cursor,
-                        zIndex: el.zIndex,
-                        boxSizing: 'border-box',
-                        transform: `rotate(${el.rotation || 0}deg)`
-                      }}
-                    >
-                      {el.type === 'text' && !isEditingText && (
-                        <div style={{
-                          width: '100%',
-                          height: '100%',
-                          color: el.color,
-                          fontSize: `${el.fontSize}px`,
-                          fontFamily: el.fontFamily,
-                          textAlign: el.textAlign,
-                          fontWeight: el.fontWeight,
-                          fontStyle: el.fontStyle,
-                          textDecoration: el.textDecoration,
-                          overflow: 'hidden',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: el.textAlign === 'center' ? 'center' : el.textAlign === 'right' ? 'flex-end' : 'flex-start',
-                          padding: '2px',
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-word'
-                        }}>{el.value}</div>
-                      )}
-                      {el.type === 'text' && isEditingText && (
-                        <textarea
-                          ref={inputRef}
-                          value={el.value}
-                          onChange={e => handleTextChange(idx, e.target.value)}
-                          onBlur={finishEditingText}
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            border: 'none',
-                            background: 'rgba(255,255,255,0.8)',
-                            color: el.color,
-                            fontSize: `${el.fontSize}px`,
-                            fontFamily: el.fontFamily,
-                            textAlign: el.textAlign,
-                            fontWeight: el.fontWeight,
-                          fontStyle: el.fontStyle,
-                          textDecoration: el.textDecoration,
-                            resize: 'none',
-                            boxSizing: 'border-box'
-                          }}
-                        />
-                      )}
-                      {el.type === 'image' && (
-                        el.src ? (
-                          <img
-                            src={el.src}
-                            alt={el.fieldName}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover', imageRendering: 'pixelated' }}
-                            draggable="false"
-                          />
-                        ) : (
-                          <div style={{
-                            width: '100%',
-                            height: '100%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            background: '#f0f0f0',
-                            color: '#aaa',
-                            fontSize: 14,
-                            fontStyle: 'italic',
-                            border: '1px dashed #ccc'
-                          }}>
-                            Imagem não definida
-                          </div>
-                        )
-                      )}
-                      {el.type === 'shape' && (
-                        <div style={{
-                          width: '100%',
-                          height: '100%',
-                          backgroundColor: el.fillColor,
-                          border: el.hasBorder ? `${el.borderWidth || 2}px solid ${el.borderColor || '#1e40af'}` : 'none',
-                          borderRadius: el.shapeType === 'circle' ? '50%' : `${el.borderRadius || 0}px`,
-                          boxSizing: 'border-box'
-                        }} />
-                      )}
-                      {isEditing && (
-                        <>
-                          <div className="resize-handle nw" />
-                          <div className="resize-handle n" />
-                          <div className="resize-handle ne" />
-                          <div className="resize-handle w" />
-                          <div className="resize-handle e" />
-                          <div className="resize-handle sw" />
-                          <div className="resize-handle s" />
-                          <div className="resize-handle se" />
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-                {snapLines.map((line, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      position: 'absolute',
-                      backgroundColor: 'red',
-                      ...(line.type === 'vertical'
-                        ? { left: line.pos, top: 0, width: 1, height: '100%' }
-                        : { top: line.pos, left: 0, height: 1, width: '100%' }),
-                    }}
-                  />
-                ))}
-              </div>
-              
-              {/* Canvas do Verso */}
-              <div
-                ref={versoCanvasRef}
-                className="card-canvas"
-                style={{
-                  width: currentDesign.tipo.width,
-                  height: currentDesign.tipo.height,
-                  backgroundColor: cardConfig.backgroundColor,
-                  borderRadius: `${cardConfig.borderRadius}px`,
-                  border: `${cardConfig.borderWidth}px solid ${cardConfig.borderColor}`,
-                  display: currentSide === 'verso' ? 'block' : 'none',
-                  transform: `scale(${zoom})`,
-                  transformOrigin: 'center center'
-                }}
-              >
-                {versoElements.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).map((el, i) => {
-                  const originalIndex = versoElements.findIndex(item => item.id === el.id);
-                  const isEditing = editingVersoElement === originalIndex;
-                  const isEditingText = editingVersoTextElement === originalIndex;
-                  const isResizing = resizingElement === originalIndex;
-                  const cursor = isResizing ? getCursorForHandle(resizeHandle) : 'grab';
-
-                  return (
-                    <div
-                      key={el.id}
-                      onMouseDown={e => handleMouseDown(e, originalIndex)}
-                      onDoubleClick={e => handleDoubleClick(e, originalIndex)}
-                      style={{
-                        position: 'absolute',
-                        left: el.x,
-                        top: el.y,
-                        width: el.width,
-                        height: el.height,
-                        border: isEditing ? '2px dashed var(--primary-color)' : 'none',
-                        cursor: cursor,
-                        zIndex: el.zIndex,
-                        boxSizing: 'border-box',
-                        transform: `rotate(${el.rotation || 0}deg)`
-                      }}
-                    >
-                      {el.type === 'text' && !isEditingText && (
-                        <div style={{
-                          width: '100%',
-                          height: '100%',
-                          color: el.color,
-                          fontSize: `${el.fontSize}px`,
-                          fontFamily: el.fontFamily,
-                          textAlign: el.textAlign,
-                          fontWeight: el.fontWeight,
-                          fontStyle: el.fontStyle,
-                          textDecoration: el.textDecoration,
-                          overflow: 'hidden',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: el.textAlign === 'center' ? 'center' : el.textAlign === 'right' ? 'flex-end' : 'flex-start',
-                          padding: '2px',
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-word'
-                        }}>{el.value}</div>
-                      )}
-                      {el.type === 'text' && isEditingText && (
-                        <textarea
-                          ref={versoInputRef}
-                          value={el.value}
-                          onChange={e => handleTextChange(idx, e.target.value)}
-                          onBlur={finishEditingText}
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            border: 'none',
-                            background: 'rgba(255,255,255,0.8)',
-                            color: el.color,
-                            fontSize: `${el.fontSize}px`,
-                            fontFamily: el.fontFamily,
-                            textAlign: el.textAlign,
-                            fontWeight: el.fontWeight,
-                          fontStyle: el.fontStyle,
-                          textDecoration: el.textDecoration,
-                            resize: 'none',
-                            boxSizing: 'border-box'
-                          }}
-                        />
-                      )}
-                      {el.type === 'image' && (
-                        <img
-                          src={el.src}
-                          alt={el.fieldName}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover', imageRendering: 'pixelated' }}
-                          draggable="false"
-                        />
-                      )}
-                      {el.type === 'shape' && (
-                        <div style={{
-                          width: '100%',
-                          height: '100%',
-                          backgroundColor: el.fillColor,
-                          border: el.hasBorder ? `${el.borderWidth || 2}px solid ${el.borderColor || '#1e40af'}` : 'none',
-                          borderRadius: el.shapeType === 'circle' ? '50%' : `${el.borderRadius || 0}px`,
-                          boxSizing: 'border-box'
-                        }} />
-                      )}
-                      {isEditing && (
-                        <>
-                          <div className="resize-handle nw" />
-                          <div className="resize-handle n" />
-                          <div className="resize-handle ne" />
-                          <div className="resize-handle w" />
-                          <div className="resize-handle e" />
-                          <div className="resize-handle sw" />
-                          <div className="resize-handle s" />
-                          <div className="resize-handle se" />
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-                {versoSnapLines.map((line, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      position: 'absolute',
-                      backgroundColor: 'red',
-                      ...(line.type === 'vertical'
-                        ? { left: line.pos, top: 0, width: 1, height: '100%' }
-                        : { top: line.pos, left: 0, height: 1, width: '100%' }),
-                    }}
-                  />
-                ))}
+                {(currentSide === 'frente' ? elements : versoElements).map((el, idx) => renderElement(el, idx))}
+                {snapLines.map((line, i) => <div key={i} className={`snap-line ${line.type}`} style={{ top: line.y, left: line.x, width: line.width, height: line.height }} />)}
               </div>
             </div>
-          </div>
 
-          <div className="designer-properties-wrapper">
-            <div className="designer-properties">
-              {(editingElement !== null || editingVersoElement !== null) ? renderPropertyEditor() : renderCardConfigEditor()}
+            <div className="properties-panel">
+              <h4>Propriedades</h4>
+              {renderPropertiesPanel()}
             </div>
           </div>
-        </div>
+        </>
       )}
 
-      {showModal === 'promptTextName' && (
-        <PromptModal
-          message="Digite o nome do campo de texto (ex: 'Nome', 'Ataque', 'Descrição'):"
-          placeholder="Nome do Campo"
-          onConfirm={handleTextNameConfirm}
-          onCancel={() => setShowModal(null)}
-        />
-      )}
-      {showModal === 'promptImageName' && (
-        <PromptModal
-          message="Digite o nome do campo de imagem (ex: 'Ilustração', 'Ícone'):"
-          placeholder="Nome do Campo"
-          onConfirm={handleImageNameConfirm}
-          onCancel={() => setShowModal(null)}
-        />
-      )}
       {showModal === 'selectType' && (
         <SelectModal
           message="Selecione o tamanho da carta:"
           options={CARD_TYPES.map(t => t.nome)}
           onConfirm={handleTypeSelect}
+          onCancel={() => setShowModal(null)}
+        />
+      )}
+
+      {showModal === 'promptTextName' && (
+        <PromptModal
+          message="Nome do campo de texto:"
+          onConfirm={handleTextNameConfirm}
+          onCancel={() => setShowModal(null)}
+        />
+      )}
+
+      {showModal === 'promptImageName' && (
+        <PromptModal
+          message="Nome do campo de imagem:"
+          onConfirm={handleImageNameConfirm}
           onCancel={() => setShowModal(null)}
         />
       )}

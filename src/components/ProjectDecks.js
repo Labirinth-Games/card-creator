@@ -4,7 +4,8 @@ import { exportProject } from '../utils/fileUtils';
 import { FiPlus, FiDownload, FiTrash2, FiBox } from 'react-icons/fi';
 import { createProject, deleteProject, getAllProjects } from '../utils/firebase';
 
-function ProjectDecks({ data, setData, selectProject }) {
+function ProjectDecks({ data, setData, selectProject, user }) {
+  const userId = user?.uid || null;
   const [showModal, setShowModal] = useState(null);
   const [projectToRemove, setProjectToRemove] = useState(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -14,7 +15,9 @@ function ProjectDecks({ data, setData, selectProject }) {
   useEffect(() => {
     async function fetchProjects() {
       const projects = await getAllProjects();
-      setData(data => ({ ...data, projects }));
+      // Only keep projects that belong to the current user
+      const userProjects = (projects || []).filter(p => p.userId === userId);
+      setData(prev => ({ ...prev, projects: userProjects }));
     }
     fetchProjects();
     // eslint-disable-next-line
@@ -28,19 +31,19 @@ function ProjectDecks({ data, setData, selectProject }) {
     if (nome && nome.trim()) {
       setIsCreating(true);
       try {
-        // Nunca envie o campo decks
-        const newProject = { nome: nome.trim() };
+        // Vincula o projeto ao usuário logado
+        const newProject = { nome: nome.trim(), userId };
         const id = await createProject(newProject);
-        // Recarrega projetos do Firestore
+        // Recarrega projetos do Firestore (apenas do usuário atual)
         const projects = await getAllProjects();
+        const userProjects = (projects || []).filter(p => p.userId === userId).map(p => {
+          const { decks, ...rest } = p;
+          return rest;
+        });
         setData(prev => {
-          // Seleciona o novo projeto automaticamente
-          const idx = projects.findIndex(p => p.id === id);
-          return { ...prev, projects: projects.map(p => {
-            // Remove campo decks se vier do Firestore
-            const { decks, ...rest } = p;
-            return rest;
-          }), selectedProject: idx };
+          // Seleciona o novo projeto automaticamente within the filtered list
+          const idx = userProjects.findIndex(p => p.id === id);
+          return { ...prev, projects: userProjects, selectedProject: idx };
         });
         setShowModal(null);
       } finally {
@@ -61,9 +64,13 @@ function ProjectDecks({ data, setData, selectProject }) {
     const project = data.projects[projectToRemove];
     if (project && project.id) {
       await deleteProject(project.id);
-      // Recarrega projetos do Firestore
+      // Recarrega projetos do Firestore (apenas do usuário atual)
       const projects = await getAllProjects();
-      setData({ ...data, projects, selectedProject: null });
+      const userProjects = (projects || []).filter(p => p.userId === userId).map(p => {
+        const { decks, ...rest } = p;
+        return rest;
+      });
+      setData(prev => ({ ...prev, projects: userProjects, selectedProject: null }));
     }
     setShowModal(null);
     setProjectToRemove(null);
@@ -82,8 +89,13 @@ function ProjectDecks({ data, setData, selectProject }) {
       </div>
       <div className="project-grid">
         {data.projects.map((proj, idx) => (
-          <div key={idx} className="project-card" onClick={() => selectProject(idx)}>
+          <div key={proj.id || idx} className="project-card" onClick={() => {
+            // Garante que o id do projeto é único e seleciona pelo id
+            const selectedIdx = data.projects.findIndex(p => p.id === proj.id);
+            if (selectProject) selectProject(selectedIdx);
+          }}>
             <h3>{proj.nome}</h3>
+            <p style={{fontSize: '0.85em', color: '#888'}}>ID: {proj.id}</p>
             <p>
               <FiBox /> Decks: (subcoleção)
             </p>

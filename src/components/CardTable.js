@@ -61,10 +61,12 @@ function CardTable({ data, setData, setShowPrintPreview }) {
     if (designerFields.length === 0) {
       return;
     }
+    setLoadingCards(true);
     const newCard = { copias: 1 };
     designerFields.forEach(field => {
       newCard[field.name] = '';
     });
+    try {
     if (data.selectedProject !== null && data.selectedDeck !== null) {
       const project = data.projects[data.selectedProject];
       if (project && project.id) {
@@ -81,6 +83,9 @@ function CardTable({ data, setData, setShowPrintPreview }) {
           setCards(cardsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         }
       }
+    }
+    } finally {
+      setLoadingCards(false);
     }
   }
 
@@ -107,7 +112,9 @@ function CardTable({ data, setData, setShowPrintPreview }) {
   async function removeCard(idx) {
     const card = cards[idx];
     if (!card || !card.id) return;
+    setLoadingCards(true);
     setCards(cards.filter((_, i) => i !== idx));
+    try {
     if (data.selectedProject !== null && data.selectedDeck !== null) {
       const project = data.projects[data.selectedProject];
       if (project && project.id) {
@@ -121,11 +128,25 @@ function CardTable({ data, setData, setShowPrintPreview }) {
         }
       }
     }
+    } finally {
+      setLoadingCards(false);
+    }
   }
 
   return (
-    <div>
-      <h2>Cartas</h2>
+    <div className="card-table-view">
+      <header className="card-table-header">
+        <div>
+          <h2 style={{margin: 10}}>Cartas do Deck</h2>
+          <p style={{margin: 10, color: 'var(--text-secondary)'}}>Adicione e edite os dados para cada carta.</p>
+        </div>
+        <div style={{display: 'flex', gap: '0.75rem'}}>
+          <button onClick={addCard}><FiPlus /> Adicionar Carta</button>
+          <button onClick={() => setShowPrintPreview(true)} className="secondary"><FiPrinter /> Imprimir</button>
+        </div>
+      </header>
+
+      <div className="card-table-content">
         {loadingCards ? (
           <div style={{ padding: '1.5rem 0' }}>
             <div className="skeleton title" style={{width: '40%', marginBottom: 12}} />
@@ -158,84 +179,75 @@ function CardTable({ data, setData, setShowPrintPreview }) {
             <p style={{margin: '0.5rem 0 0 0'}}>Depois, volte aqui para adicionar os dados de cada carta.</p>
           </div>
         ) : (
-          <>
-            <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <p style={{margin: 0, color: 'var(--text-secondary)'}}>Adicione e edite os dados para cada carta do seu deck.</p>
-              <div style={{display: 'flex', gap: '0.75rem'}}>
-                <button onClick={addCard}><FiPlus /> Adicionar Carta</button>
-                <button onClick={() => setShowPrintPreview(true)} className="secondary"><FiPrinter /> Imprimir</button>
-              </div>
-            </div>
-            
-            <div className="modern-table-container">
-              <table className="modern-table">
-                <thead>
-                  <tr>
-                    <th>Cópias</th>
-                    {designerFields.map((field, idx) => (
-                      <th key={idx}>{field.name}</th>
-                    ))}
-                    <th style={{width: '5%'}}>Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cards.map((card, idx) => (
-                    <tr key={idx}>
-                      <td>
-                        <input 
-                          type="number" 
-                          value={card.copias} 
-                          min={1} 
-                          onChange={e => updateCard(idx, 'copias', Number(e.target.value))} 
-                          className="modern-input"
-                        />
-                      </td>
-                      {designerFields.map((field, fidx) => (
-                        <td key={fidx}>
-                          {field.dataType === 'text' ? (
-                            <textarea 
-                              value={card[field.name] || ''} 
-                              onChange={e => updateCard(idx, field.name, e.target.value)}
-                              className="modern-input modern-textarea"
-                              placeholder={field.name}
-                              rows={2}
-                              style={{ width: '100%', boxSizing: 'border-box' }}
-                            />
-                          ) : field.type === 'image' ? (
-                            <ImageDropZone
-                              value={card[field.name] || ''}
-                              onChange={(newValue) => updateCard(idx, field.name, newValue)}
-                              placeholder="Arraste uma imagem ou cole a URL"
-                            />
-                          ) : field.dataType === 'number' ? (
-                            <input 
-                              type="number"
-                              value={card[field.name] || ''} 
-                              onChange={e => updateCard(idx, field.name, e.target.value)}
-                              className="modern-input"
-                              placeholder={field.name}
-                            />
-                          ) : (
-                            <input 
-                              type="text"
-                              value={card[field.name] || ''} 
-                              onChange={e => updateCard(idx, field.name, e.target.value)}
-                              className="modern-input"
-                              placeholder={field.name}
-                            />
-                          )}
-                        </td>
-                      ))}
-                      <td>
-                        <button className="danger" onClick={() => removeCard(idx)} title="Remover carta"><FiTrash2 /></button>
-                      </td>
-                    </tr>
+          <div className="modern-table-container">
+            <table className="modern-table">
+              <thead>
+                <tr>
+                  <th>Cópias</th>
+                  {designerFields.map((field, idx) => (
+                    <th key={idx}>{field.name}</th>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          </>
+                  <th style={{width: '5%'}}>Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cards.map((card, idx) => (
+                  <tr key={idx}>
+                    <td>
+                      <input 
+                        type="number" 
+                        value={card.copias} 
+                        min={1} 
+                        onChange={e => updateCard(idx, 'copias', Number(e.target.value))} 
+                        className="modern-input"
+                      />
+                    </td>
+                    {designerFields.map((field, fidx) => (
+                      <td key={fidx}>
+                        {field.dataType === 'text' ? (
+                          <textarea 
+                            value={card[field.name] || ''} 
+                            onChange={e => updateCard(idx, field.name, e.target.value)}
+                            className="modern-input modern-textarea"
+                            placeholder={field.name}
+                            rows={2}
+                            style={{ width: '100%', boxSizing: 'border-box' }}
+                          />
+                        ) : field.type === 'image' ? (
+                          <ImageDropZone
+                            value={card[field.name] || ''}
+                            onChange={(newValue) => updateCard(idx, field.name, newValue)}
+                            placeholder="Arraste uma imagem ou cole a URL"
+                          />
+                        ) : field.dataType === 'number' ? (
+                          <input 
+                            type="number"
+                            value={card[field.name] || ''} 
+                            onChange={e => updateCard(idx, field.name, e.target.value)}
+                            className="modern-input"
+                            placeholder={field.name}
+                          />
+                        ) : (
+                          <input 
+                            type="text"
+                            value={card[field.name] || ''} 
+                            onChange={e => updateCard(idx, field.name, e.target.value)}
+                            className="modern-input"
+                            placeholder={field.name}
+                          />
+                        )}
+                      </td>
+                    ))}
+                    <td>
+                      <button className="danger" onClick={() => removeCard(idx)} title="Remover carta"><FiTrash2 /></button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
+      </div>
     </div>
   );
 }

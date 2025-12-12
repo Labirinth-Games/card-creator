@@ -1,0 +1,79 @@
+.signup-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f5f6fa;
+}
+
+.signup-form {
+  background: #fff;
+  padding: 2rem 2.5rem;
+  border-radius: 12px;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 320px;
+  align-items: center;
+}
+
+.signup-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+.signup-title {
+  font-size: 1.5rem;
+  color: #1e40af;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: 1px;
+}
+.input-group {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  background: #f3f4f6;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  margin-bottom: 0.5rem;
+}
+.input-icon {
+  margin-left: 0.75rem;
+  margin-right: 0.5rem;
+  color: #1e40af;
+  font-size: 1.2rem;
+}
+.input-group input {
+  border: none;
+  background: transparent;
+  outline: none;
+  padding: 0.75rem 0.75rem 0.75rem 0;
+  font-size: 1rem;
+  width: 100%;
+}
+.primary-signup-btn {
+  background: #1e40af;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 0.75rem;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.signup-error {
+  color: #dc2626;
+  font-size: 0.95rem;
+  margin-top: 0.5rem;
+  text-align: center;
+}

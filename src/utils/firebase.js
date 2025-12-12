@@ -1,6 +1,16 @@
+// CRUD de Usuários
+export async function saveUser(user) {
+  const usersCol = collection(db, 'users');
+  const userDoc = doc(usersCol, user.uid);
+  await setDoc(userDoc, {
+    uid: user.uid,
+    email: user.email,
+    createdAt: new Date().toISOString()
+  });
+}
 // firebase.js - Inicialização do Firebase e funções utilitárias CRUD
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, doc, addDoc, setDoc, getDoc, getDocs, updateDoc, deleteDoc } from 'firebase/firestore';
+import { getFirestore, collection, doc, addDoc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
 
 
 
@@ -105,9 +115,9 @@ export function getDecksCol(projectId) {
   return collection(db, 'projects', projectId, 'decks');
 }
 
-export async function addDeck(projectId, deck) {
+export async function addDeck(projectId, deck, userId) {
   const decksCol = getDecksCol(projectId);
-  const docRef = await addDoc(decksCol, deck);
+  const docRef = await addDoc(decksCol, { ...deck, userId });
   return docRef.id;
 }
 
@@ -115,20 +125,22 @@ export async function deleteDeck(projectId, deckId) {
   // Deletar todas as cartas primeiro
   const cardsCol = collection(db, 'projects', projectId, 'decks', deckId, 'cards');
   const cardsSnap = await getDocs(cardsCol);
-  
   for (const cardDoc of cardsSnap.docs) {
     await deleteDoc(cardDoc.ref);
   }
-  
   // Deletar o deck
   const decksCol = getDecksCol(projectId);
   const deckRef = doc(decksCol, deckId);
   await deleteDoc(deckRef);
 }
 
-export async function getAllDecks(projectId) {
+export async function getAllDecks(projectId, userId) {
   const decksCol = getDecksCol(projectId);
-  const snapshot = await getDocs(decksCol);
+  let q = decksCol;
+  if (userId) {
+    q = query(decksCol, where('userId', '==', userId));
+  }
+  const snapshot = await getDocs(q);
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 }
 

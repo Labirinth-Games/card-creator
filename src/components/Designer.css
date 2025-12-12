@@ -1,0 +1,307 @@
+.designer-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 100vh;
+  width: 100%;
+  background-color: var(--secondary-color);
+  overflow: hidden;
+}
+
+.no-designer-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.designer-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  background-color: var(--card-background);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.control-group button {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  padding: 0.5rem;
+}
+.control-group button:hover {
+  background-color: var(--secondary-hover);
+  color: var(--text-primary);
+}
+.control-group button.active {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.zoom-level {
+  padding: 0 0.5rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.save-button-dirty {
+  background-color: var(--primary-color) !important;
+  color: white !important;
+  position: relative;
+}
+
+.save-button-dirty::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  background-color: var(--danger-color);
+  border-radius: 50%;
+  border: 2px solid var(--card-background);
+}
+
+.save-button-saved {
+  background-color: var(--success-color) !important;
+  color: white !important;
+}
+
+.save-button-saved:disabled,
+.save-button-dirty:disabled {
+  background-color: var(--secondary-color) !important;
+  color: var(--text-secondary) !important;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.save-button-saved:disabled::after {
+  display: none;
+}
+
+.main-designer-area {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  height: calc(100vh - 120px);
+  min-height: 600px;
+  max-height: 600px;
+}
+
+.layers-panel {
+  width: 260px;
+  background-color: var(--card-background);
+  padding: 0.75rem;
+  overflow-y: auto;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border-color);
+}
+
+.properties-panel {
+  width: 260px;
+  background-color: var(--card-background);
+  padding: 1rem;
+  overflow-y: auto;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border-color);
+}
+.properties-panel {
+  border-right: none;
+  border-left: 1px solid var(--border-color);
+}
+
+.layers-panel h4, .properties-panel h4 {
+  margin: 0 0 1rem 0;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 0.75rem;
+}
+
+.layer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.layer-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.layer-item:hover {
+  background-color: var(--secondary-color);
+}
+.layer-item.active {
+  background-color: #e0e7ff;
+  border-color: var(--primary-color);
+  font-weight: 500;
+}
+
+.layer-actions button {
+  padding: 0.25rem;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+}
+.layer-actions button:hover {
+  color: var(--text-primary);
+}
+
+.canvas-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  overflow: auto;
+  position: relative;
+  height: 100%;
+}
+
+.property-group {
+  margin-bottom: 1.5rem;
+}
+.property-group h5 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+.property-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+.property-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.property-item label {
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.property-item input, .property-item select {
+  width: 100%;
+}
+.full-width {
+  grid-column: 1 / -1;
+}
+
+.color-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.color-input-wrapper input[type="color"] {
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+.color-input-wrapper input[type="text"] {
+  flex: 1;
+}
+
+.font-style-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+.font-style-buttons button {
+  flex: 1;
+  padding: 0.25rem;
+}
+
+/* Botões de ícone (quadrados, centralizados) */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+.icon-btn:hover {
+  background-color: var(--secondary-hover);
+  color: var(--text-primary);
+}
+.icon-btn.active {
+  background-color: var(--primary-color);
+  color: #fff;
+  border-color: var(--primary-color);
+}
+
+/* Ajuste específico para os botões em property panel */
+.property-editor .font-style-buttons .icon-btn {
+  width: 40px;
+  height: 36px;
+}
+
+.prop-actions button,
+.layer-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+}
+.prop-actions button:hover,
+.layer-actions button:hover {
+  background-color: var(--secondary-hover);
+  color: var(--text-primary);
+}
+
+/* Resize handles for selected elements */
+.resize-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background-color: white;
+  border: 2px solid var(--primary-color);
+  border-radius: 50%;
+  z-index: 1000;
+  pointer-events: all;
+}
+
+.resize-handle.nw { top: -5px; left: -5px; cursor: nwse-resize; }
+.resize-handle.ne { top: -5px; right: -5px; cursor: nesw-resize; }
+.resize-handle.sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
+.resize-handle.se { bottom: -5px; right: -5px; cursor: nwse-resize; }
+.resize-handle.n { top: -5px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
+.resize-handle.s { bottom: -5px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
+.resize-handle.w { top: 50%; left: -5px; transform: translateY(-50%); cursor: ew-resize; }
+.resize-handle.e { top: 50%; right: -5px; transform: translateY(-50%); cursor: ew-resize; }
+
+.element-selected {
+  border: 2px dashed var(--primary-color) !important;
+  box-sizing: border-box;
+}
